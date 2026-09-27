@@ -100,6 +100,11 @@ namespace SC6000DualMonitor
         }
         private void Connect()
         {
+            if (string.IsNullOrWhiteSpace(_settings.Ip))
+            {
+                _status.Text = _settings.Title + "\r\n카메라 IP 미설정: config.ini를 확인하세요.";
+                return;
+            }
             string stage = "Remote 연결";
             try
             {
@@ -147,7 +152,7 @@ namespace SC6000DualMonitor
                 _status.Visible = true;
                 _status.BringToFront();
                 Trace.WriteLine(ex);
-                MessageBox.Show(this, details, "WILLB | 카메라 연결 안내", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                // Keep the failure inside this camera pane; other cameras remain usable.
             }
         }
 

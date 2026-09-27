@@ -189,9 +189,7 @@ namespace SC6000DualMonitor
         public CameraSettings GetCamera(int slot)
         {
             string section = "CAMERA" + slot;
-            string ip = Get(section + ".IP", null);
-            if (string.IsNullOrWhiteSpace(ip))
-                throw new InvalidOperationException(section + "의 IP가 config.ini에 설정되어 있지 않습니다.");
+            string ip = Get(section + ".IP", string.Empty);
 
             return new CameraSettings
             {

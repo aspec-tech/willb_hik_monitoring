@@ -11,6 +11,7 @@ namespace SC6000DualMonitor
 {
     internal sealed class MonitorForm : Form
     {
+        private readonly List<bool> _configured = new List<bool>();
         private readonly List<Process> _viewers = new List<Process>();
         private readonly List<Panel> _panels = new List<Panel>();
         private readonly List<Label> _statuses = new List<Label>();
@@ -48,9 +49,12 @@ namespace SC6000DualMonitor
             for (int i = 0; i < config.CameraCount; i++)
             {
                 CameraSettings camera = config.GetCamera(i + 1);
+                bool configured = !string.IsNullOrWhiteSpace(camera.Ip);
+                _configured.Add(configured);
                 var panel = new Panel { Dock = DockStyle.Fill, Margin = new Padding(1), BackColor = Color.FromArgb(45, 52, 56) };
                 var status = new Label { Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleCenter, ForeColor = Color.White,
-                    Text = camera.Title + "\r\n" + camera.Ip + "\r\n연결 준비 중...", Font = new Font("Segoe UI", 12) };
+                    Text = configured ? camera.Title + "\r\n" + camera.Ip + "\r\n연결 준비 중..." :
+                        camera.Title + "\r\n카메라 IP 미설정\r\n실행 파일 옆 config.ini의 [CAMERA" + (i + 1) + "]에 IP를 입력한 후 다시 실행하세요.", Font = new Font("Segoe UI", 12) };
                 panel.Controls.Add(status);
                 Point cell = policy.Cell(i);
                 grid.Controls.Add(panel, cell.X, cell.Y);
@@ -66,7 +70,7 @@ namespace SC6000DualMonitor
             {
                 FitViewers();
                 for (int i = 0; i < _viewers.Count; i++)
-                    if (_viewers[i] == null || _viewers[i].HasExited)
+                    if (_viewers[i] != null && _viewers[i].HasExited)
                         _statuses[i].Text = "카메라 " + (i + 1) + " 화면이 종료되었습니다.\r\n프로그램을 다시 실행해 주세요.";
             };
         }
@@ -101,6 +105,7 @@ namespace SC6000DualMonitor
         {
             for (int i = 0; i < _panels.Count; i++)
             {
+                if (!_configured[i]) { _viewers.Add(null); continue; }
                 try
                 {
                     _viewers.Add(Process.Start(new ProcessStartInfo
@@ -114,7 +119,8 @@ namespace SC6000DualMonitor
                 catch (Exception ex)
                 {
                     _viewers.Add(null);
-                    MessageBox.Show(this, "카메라 " + (i + 1) + " 화면을 시작하지 못했습니다.\r\n" + ex.Message, "WILLB", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                    _statuses[i].Text = "카메라 " + (i + 1) + " 화면을 시작하지 못했습니다.\r\n" + ex.Message;
+                    Trace.WriteLine(ex);
                 }
             }
             _watch.Start();
