@@ -55,7 +55,16 @@ namespace SC6000DualMonitor
                 var status = new Label { Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleCenter, ForeColor = Color.White,
                     Text = configured ? camera.Title + "\r\n" + camera.Ip + "\r\n연결 준비 중..." :
                         camera.Title + "\r\n카메라 IP 미설정\r\n실행 파일 옆 config.ini의 [CAMERA" + (i + 1) + "]에 IP를 입력한 후 다시 실행하세요.", Font = new Font("Segoe UI", 12) };
-                panel.Controls.Add(status);
+                if (configured)
+                    panel.Controls.Add(status);
+                else
+                {
+                    // Render the same controls without starting a viewer or contacting the SDK.
+                    var solutions = new SolutionPane(
+                        new RemoteSolutionSession(camera.SolutionDirectory, camera.SolutionPassword), delegate { });
+                    solutions.Content.Controls.Add(status);
+                    panel.Controls.Add(solutions);
+                }
                 Point cell = policy.Cell(i);
                 grid.Controls.Add(panel, cell.X, cell.Y);
                 panel.SizeChanged += delegate { FitViewers(); };
