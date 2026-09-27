@@ -33,8 +33,8 @@ namespace SC6000DualMonitor
             layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
             Content = new Panel { Dock = DockStyle.Fill, Margin = Padding.Empty };
             var footer = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 4, RowCount = 2, Margin = Padding.Empty, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink };
-            footer.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 30));
-            footer.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 70));
+            footer.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 72));
+            footer.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 28));
             footer.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
             footer.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
             footer.RowStyles.Add(new RowStyle(SizeType.Absolute, 22));
