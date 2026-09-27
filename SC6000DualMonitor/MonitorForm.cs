@@ -24,7 +24,7 @@ namespace SC6000DualMonitor
             _exePath = exePath;
             _baseDir = baseDir;
             AutoScaleMode = AutoScaleMode.None;
-            Text = "ASPEC | SC6000 Operation Interface Monitor";
+            Text = "WILLB | SC6000 Operation Interface Monitor";
             Icon = Icon.ExtractAssociatedIcon(exePath);
             StartPosition = FormStartPosition.Manual;
             var screens = Screen.AllScreens;
@@ -82,21 +82,9 @@ namespace SC6000DualMonitor
 
         private void LoadLogo()
         {
-            // Try every logo.* file; GDI+ determines whether its content is supported.
-            string[] preferred = { ".png", ".bmp", ".jpg", ".jpeg", ".gif", ".tif", ".tiff", ".ico", ".wmf", ".emf" };
-            foreach (string file in Directory.GetFiles(_baseDir).Where(f => string.Equals(Path.GetFileNameWithoutExtension(f), "logo", StringComparison.OrdinalIgnoreCase))
-                .OrderBy(f => { int n = Array.IndexOf(preferred, Path.GetExtension(f).ToLowerInvariant()); return n < 0 ? int.MaxValue : n; }).ThenBy(f => f, StringComparer.OrdinalIgnoreCase))
-            {
-                try
-                {
-                    using (var stream = new MemoryStream(File.ReadAllBytes(file)))
-                    using (var source = Image.FromStream(stream))
-                        _logo = new Bitmap(source);
-
-                    return;
-                }
-                catch (Exception ex) { Trace.WriteLine("Logo load failed: " + file + " " + ex.Message); }
-            }
+            using (var stream = typeof(MonitorForm).Assembly.GetManifestResourceStream("SC6000DualMonitor.WillBLogo.png"))
+            using (var source = Image.FromStream(stream))
+                _logo = new Bitmap(source);
         }
 
         [DllImport("user32.dll")]
@@ -126,7 +114,7 @@ namespace SC6000DualMonitor
                 catch (Exception ex)
                 {
                     _viewers.Add(null);
-                    MessageBox.Show(this, "카메라 " + (i + 1) + " 화면을 시작하지 못했습니다.\r\n" + ex.Message, "ASPEC", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                    MessageBox.Show(this, "카메라 " + (i + 1) + " 화면을 시작하지 못했습니다.\r\n" + ex.Message, "WILLB", MessageBoxButtons.OK, MessageBoxIcon.Error);
                 }
             }
             _watch.Start();

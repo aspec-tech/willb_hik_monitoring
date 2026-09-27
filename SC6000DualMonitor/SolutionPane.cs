@@ -119,7 +119,7 @@ namespace SC6000DualMonitor
                 {
                     _choices.Items.Clear();
                     state = "목록 조회 실패: " + Describe(ex);
-                    if (!initial) MessageBox.Show(this, state, "ASPEC | Solution 목록", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    if (!initial) MessageBox.Show(this, state, "WILLB | Solution 목록", MessageBoxButtons.OK, MessageBoxIcon.Warning);
                 }
                 finally { SetBusy(false, state); }
             }));
@@ -155,14 +155,14 @@ namespace SC6000DualMonitor
                         if (result.RecoveryError != null) state += "\r\n복원 오류: " + Describe(result.RecoveryError);
                         if (result.RecoveryAttempted || result.LoadCompleted)
                             try { _reloadFrontend(); } catch (Exception ex) { state += "\r\n화면 재로딩 오류: " + Describe(ex); }
-                        MessageBox.Show(this, state, "ASPEC | Solution 변경 실패", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                        MessageBox.Show(this, state, "WILLB | Solution 변경 실패", MessageBoxButtons.OK, MessageBoxIcon.Error);
                     }
                 }
                 catch (Exception ex)
                 {
                     ReadCurrent();
                     state = "화면 갱신 실패: " + Describe(ex) + " (현재 Solution 표시를 확인하세요.)";
-                    MessageBox.Show(this, state, "ASPEC | Operation Interface", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    MessageBox.Show(this, state, "WILLB | Operation Interface", MessageBoxButtons.OK, MessageBoxIcon.Warning);
                 }
                 finally { SetBusy(false, state); }
             }));

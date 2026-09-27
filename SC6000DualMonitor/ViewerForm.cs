@@ -141,7 +141,7 @@ namespace SC6000DualMonitor
                 _status.Visible = true;
                 _status.BringToFront();
                 Trace.WriteLine(ex);
-                MessageBox.Show(this, details, "ASPEC | 카메라 연결 안내", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                MessageBox.Show(this, details, "WILLB | 카메라 연결 안내", MessageBoxButtons.OK, MessageBoxIcon.Warning);
             }
         }
 

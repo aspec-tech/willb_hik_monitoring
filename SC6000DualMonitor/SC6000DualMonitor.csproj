@@ -6,7 +6,6 @@
     <Platform Condition=" '$(Platform)' == '' ">AnyCPU</Platform>
     <ProjectGuid>{9A91A4FE-783F-4D38-AE23-9EA386AF8A32}</ProjectGuid>
     <OutputType>WinExe</OutputType>
-    <ApplicationIcon>aspec.ico</ApplicationIcon>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <RootNamespace>SC6000DualMonitor</RootNamespace>
     <AssemblyName>SC6000DualMonitor</AssemblyName>
@@ -69,7 +68,10 @@
   </ItemGroup>
   <ItemGroup>
     <None Include="App.config" />
-    <None Include="aspec.ico" />
+    <EmbeddedResource Include="Assets\willb.png">
+      <LogicalName>SC6000DualMonitor.WillBLogo.png</LogicalName>
+    </EmbeddedResource>
+    <None Include="config.example.ini" />
     <None Include="app.manifest" />
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
@@ -78,4 +80,9 @@
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
   </ItemGroup>
+  <Target Name="EnsureLocalConfig" BeforeTargets="PrepareForBuild">
+    <Copy SourceFiles="$(MSBuildProjectDirectory)\config.example.ini"
+          DestinationFiles="$(MSBuildProjectDirectory)\config.ini"
+          Condition="!Exists('$(MSBuildProjectDirectory)\config.ini')" />
+  </Target>
 </Project>
