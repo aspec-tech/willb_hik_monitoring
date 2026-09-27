@@ -115,6 +115,12 @@ namespace SC6000DualMonitor
                     strPassword = _settings.Password
                 });
                 _connected = true;
+                if (!string.IsNullOrWhiteSpace(_settings.SolutionPath))
+                {
+                    stage = "시작 Solution 로딩: " + _settings.SolutionPath;
+                    // The path belongs to the camera, not to the monitoring PC.
+                    VmSolution.Load(_settings.SolutionPath, _settings.SolutionPassword);
+                }
                 stage = "Operation Interface 로딩";
                 FitParent();
                 _frontend.LoadFrontendSource();

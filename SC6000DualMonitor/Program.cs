@@ -105,6 +105,7 @@ namespace SC6000DualMonitor
         public string Ip { get; set; }
         public string Password { get; set; }
         public string Title { get; set; }
+        public string SolutionPath { get; set; }
         public string SolutionDirectory { get; set; }
         public string SolutionPassword { get; set; }
         public int MonitorIndex { get; set; }
@@ -196,6 +197,7 @@ namespace SC6000DualMonitor
             {
                 Ip = ip.Trim(),
                 Password = Get(section + ".PASSWORD", string.Empty),
+                SolutionPath = Get(section + ".SOLUTION_PATH", string.Empty).Trim(),
                 SolutionDirectory = Get(section + ".SOLUTION_DIRECTORY", string.Empty),
                 SolutionPassword = Get(section + ".SOLUTION_PASSWORD", string.Empty),
                 Title = Get(section + ".TITLE", "SC6000 Camera " + slot),
