@@ -6,6 +6,7 @@
     <Platform Condition=" '$(Platform)' == '' ">AnyCPU</Platform>
     <ProjectGuid>{9A91A4FE-783F-4D38-AE23-9EA386AF8A32}</ProjectGuid>
     <OutputType>WinExe</OutputType>
+    <ApplicationIcon>Assets\willb.ico</ApplicationIcon>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <RootNamespace>SC6000DualMonitor</RootNamespace>
     <AssemblyName>SC6000DualMonitor</AssemblyName>
@@ -68,6 +69,7 @@
   </ItemGroup>
   <ItemGroup>
     <None Include="App.config" />
+    <None Include="Assets\willb.ico" />
     <EmbeddedResource Include="Assets\willb.png">
       <LogicalName>SC6000DualMonitor.WillBLogo.png</LogicalName>
     </EmbeddedResource>
