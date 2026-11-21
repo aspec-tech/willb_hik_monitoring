@@ -89,9 +89,22 @@ namespace SC6000DualMonitor
             _part.Text = settings == null ? "" : settings.PartNumber;
             _state.Text = "검사 결과 연결 대기";
             _csvPartNumber = _part.Text;
-            _csvEnabled.Checked = false; // Explicit opt-in for every program launch.
+            _csvEnabled.Checked = _csvMappingStore.RecordingRequested;
             _csvEnabled.Enabled = false;
-            _csvEnabled.CheckedChanged += delegate { ApplyCsvSetting(); };
+            _csvEnabled.CheckedChanged += delegate
+            {
+                if (_updatingCsvCheckbox) return;
+                try { _csvMappingStore.SaveRecordingPreference(_csvEnabled.Checked); }
+                catch (Exception ex)
+                {
+                    _updatingCsvCheckbox = true;
+                    try { _csvEnabled.Checked = !_csvEnabled.Checked; }
+                    finally { _updatingCsvCheckbox = false; }
+                    MessageBox.Show(this, "CSV 기록 설정을 저장하지 못했습니다.\r\n" + ex.Message, "CSV 설정");
+                    return;
+                }
+                ApplyCsvSetting(_csvEnabled.Checked, true);
+            };
             _csvState.Width = 520;
             _csvState.Height = 60;
             _csvMappingButton.Enabled = false;
@@ -121,12 +134,13 @@ namespace SC6000DualMonitor
             _state.Text = "검사 연결: " + session.TargetDescription;
             _csvEnabled.Enabled = true;
             _csvMappingButton.Enabled = true;
-            if (_csvEnabled.Checked) ApplyCsvSetting();
+            if (_csvEnabled.Checked) ApplyCsvSetting(true, false);
         }
         public void SetModelPath(string solutionPath)
         {
-            if (_csvActive && !string.Equals(_csvRecipePath, solutionPath ?? "", StringComparison.Ordinal))
-                _csvEnabled.Checked = false;
+            bool rebindCsv = _session != null && _csvEnabled.Checked &&
+                !string.Equals(_csvRecipePath, solutionPath ?? "", StringComparison.Ordinal);
+            if (rebindCsv && _csvActive) ApplyCsvSetting(false, false);
             _solutionPath = solutionPath;
             _part.Text = _settings.PartNumber ?? "";
             string storageError = null;
@@ -138,6 +152,7 @@ namespace SC6000DualMonitor
             _csvRecipePath = solutionPath ?? "";
             _csvPartNumber = _part.Text;
             _savePart.Enabled = !string.IsNullOrWhiteSpace(solutionPath);
+            if (rebindCsv) ApplyCsvSetting(true, false);
             if (storageError != null) _state.Text = storageError;
             else if (_setup.Enabled || _state.Text == "검사 결과 연결 대기")
                 _state.Text = string.IsNullOrWhiteSpace(solutionPath) ? "모델명 저장: 레시피 경로 확인 필요" : "검사 대기";
@@ -178,7 +193,7 @@ namespace SC6000DualMonitor
         {
             var session = _session;
             if (session == null) return;
-            if (_csvEnabled.Checked)
+            if (_csvActive)
             {
                 MessageBox.Show(this, "CSV 기록 저장 체크를 해제한 다음 항목을 변경하세요.", "CSV 설정");
                 return;
@@ -192,17 +207,16 @@ namespace SC6000DualMonitor
                     if (!ReferenceEquals(session, _session) || recipe != _csvRecipePath) throw new InvalidOperationException("레시피가 변경되었습니다. 항목 설정을 다시 열어주세요.");
                     _csvMappingStore.Write(session.CsvProcedureName, recipe, dialog.Selection);
                     _csvActivationError = null;
-                    UpdateCsvStatus();
+                    if (_csvEnabled.Checked) ApplyCsvSetting(true, true);
+                    else UpdateCsvStatus();
                 }
             }
             catch (Exception ex) { MessageBox.Show(this, ex.Message, "CSV 항목 설정", MessageBoxButtons.OK, MessageBoxIcon.Warning); }
         }
-        private void ApplyCsvSetting()
+        private void ApplyCsvSetting(bool wanted, bool notify)
         {
-            if (_updatingCsvCheckbox) return;
             var session = _session;
             if (session == null) return;
-            bool wanted = _csvEnabled.Checked;
             try
             {
                 if (wanted)
@@ -226,10 +240,7 @@ namespace SC6000DualMonitor
                 _csvActivationError = ex.Message;
                 try { session.SetCsvCaptureEnabled(false); } catch { }
                 session.CsvSampleReady -= OnCsvSample;
-                _updatingCsvCheckbox = true;
-                _csvEnabled.Checked = false;
-                _updatingCsvCheckbox = false;
-                MessageBox.Show(this, "CSV 기록 활성화 실패:\r\n" + ex.Message + "\r\n기존 검사 기능은 유지됩니다.", "CSV 기록", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                if (notify) MessageBox.Show(this, "CSV 기록 설정 오류:\r\n" + ex.Message, "CSV 기록", MessageBoxButtons.OK, MessageBoxIcon.Warning);
             }
             UpdateCsvStatus();
         }

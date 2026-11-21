@@ -110,11 +110,26 @@ class CsvRegressionTests
         string recoveryFile=((string)Field(recovery,"_error")).Substring("미저장 결과 복구 파일: ".Length);
         Check(File.ReadAllLines(recoveryFile).Length==2,"recovery CSV contains unsaved row");
         ((Thread)Field(recovery,"_worker")).Join();Set(recovery,"_error",null);((IDisposable)recovery).Dispose();
-        var pane=(Control)Activator.CreateInstance(T("InspectionPane"),new object[]{null});
+        var settings=Activator.CreateInstance(T("CameraSettings"));
+        string camera="csv-ui-"+Guid.NewGuid().ToString("N");
+        T("CameraSettings").GetProperty("Ip").SetValue(settings,camera,null);
+        Func<Control> openPane=()=>(Control)Activator.CreateInstance(T("InspectionPane"),new[]{settings});
+        var pane=openPane();
         pane.Size=new System.Drawing.Size(720,116);pane.CreateControl();pane.PerformLayout();
         Check(((Control)Field(pane,"_part")).Width>250,"CSV button leaves PART NO room in dual camera pane");
         Check(!((CheckBox)Field(pane,"_csvEnabled")).Checked,"CSV opt-in; default disabled");
+        ((CheckBox)Field(pane,"_csvEnabled")).Checked=true;
         pane.Dispose();
+        using(var reopened=openPane())
+        {
+            var toggle=(CheckBox)Field(reopened,"_csvEnabled");
+            Check(toggle.Checked,"relaunch remembers enabled camera");
+            T("CameraSettings").GetProperty("Ip").SetValue(settings,camera+"-second",null);
+            using(var second=openPane()) Check(!((CheckBox)Field(second,"_csvEnabled")).Checked,"second camera stays independent");
+            toggle.Checked=false;
+        }
+        T("CameraSettings").GetProperty("Ip").SetValue(settings,camera,null);
+        using(var stopped=openPane()) Check(!((CheckBox)Field(stopped,"_csvEnabled")).Checked,"manual stop survives relaunch");
         Console.WriteLine("PASS: "+checks+" CSV regression checks; artifacts: "+testRoot);
     }
 }

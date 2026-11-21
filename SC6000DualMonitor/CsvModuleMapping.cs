@@ -43,6 +43,18 @@ namespace SC6000DualMonitor
             using (var hash = System.Security.Cryptography.SHA256.Create())
                 return Path.Combine(_folder, BitConverter.ToString(hash.ComputeHash(Encoding.UTF8.GetBytes(procedure + "\n" + recipe))).Replace("-", "") + ".txt");
         }
+        // A marker in this camera's folder keeps the opt-in independent of its recipe mappings.
+        private string RecordingMarker { get { return Path.Combine(_folder, "recording.enabled"); } }
+        public bool RecordingRequested { get { return File.Exists(RecordingMarker); } }
+        public void SaveRecordingPreference(bool enabled)
+        {
+            if (enabled)
+            {
+                Directory.CreateDirectory(_folder);
+                using (File.Open(RecordingMarker, FileMode.OpenOrCreate, FileAccess.Write, FileShare.Read)) { }
+            }
+            else if (Directory.Exists(_folder)) File.Delete(RecordingMarker);
+        }
         public CsvModuleMapping Read(string procedure, string recipe)
         {
             try
