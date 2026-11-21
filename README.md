@@ -181,11 +181,11 @@ OK/NG 및 BLOB의 ‘적용 및 카메라 저장’은 카메라에서 조회한
 1. 각 카메라의 PART NO 옆 **CSV** 버튼을 누릅니다.
 2. **항목 설정**에서 Top / Middle / Bottom / Circle에 해당하는 서로 다른 **Format 모듈 4개**를 선택합니다. 카메라에서 실제로 조회한 Format 모듈만 표시합니다. 각 모듈의 `format_out` 결과 문자열이 하나여야 합니다.
 3. **CSV 기록 저장**을 한 번 체크하면 해당 PC에서 카메라별 선택을 기억합니다. 다음 실행 시 카메라가 연결되면 현재 레시피의 항목 설정으로 기록을 재개합니다. 체크를 해제하면 다음 실행에도 기록이 꺼져 있습니다. **CSV 오류**가 표시되면 버튼을 열어 항목 설정을 확인하세요.
-4. **폴더** 버튼으로 CSV를 엽니다. 저장 위치는 `%LOCALAPPDATA%\WILLB\SC6000Monitor\CsvHistory\카메라IP\inspection_yyyy-MM-dd.csv`입니다.
+4. **폴더** 버튼으로 CSV를 엽니다. 저장 위치는 `%LOCALAPPDATA%\WILLB\SC6000Monitor\CsvHistory\카메라IP\inspection_v2_yyyy-MM-dd.csv`입니다.
 
 항목 연결은 카메라 IP·검사 흐름·레시피 경로별로 저장됩니다. 모듈 이름을 바꾸면 항목을 다시 선택하세요. 현재 레시피 경로가 확인되지 않으면 항목 연결을 저장하지 않습니다. 다른 레시피로 바꾸면 해당 레시피의 연결 설정이 필요합니다.
 
-CSV 열: `Time,Frame,PART NO,Recipe,Top,Middle,Bottom,Circle,Result,DataStatus`. 자동 검사의 OK / NG / ERROR를 기록하며, 수동 모듈 단독 실행은 제외합니다. 같은 실행 번호의 결과끼리 묶고, 완료 후 약 2초가 지나도 측정값이 없으면 빈 값과 `MISSING: 모듈명`을 기록합니다. 다른 회차의 값을 대신 넣지 않습니다. PART NO는 저장된 모델명입니다.
+CSV 열은 `Date,Time,Frame,PART NO,Result,Details`입니다. 모델번호는 `@@모델번호@@`로 감싸며 빈 번호는 `@@@@`입니다. 전체 검사 오류는 NG로 기록합니다. 상세 열은 C(원), CB(Top), WIRE(Middle), INS(Bottom) 순서이며 같은 Frame의 Format 측정값과 Condition Detection 개별 판정을 사용합니다. 숫자나 해당 판정이 없으면 `ERROR:`로 표시합니다. 예: `C:OK:6.55:CB:OK:14.21:WIRE:NG:4.9:INS:OK:2.87`.
 
 CSV는 카메라 레시피, Save Text, FTP 설정을 수정하지 않습니다. 기존 카운터, Set Up, NG/ERROR 필름스트립, 확인 전 화면 고정은 그대로입니다. CSV 연결 실패도 기존 검사 기능을 중단하지 않습니다.
 

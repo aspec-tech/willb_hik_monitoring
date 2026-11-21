@@ -19,6 +19,7 @@ namespace SC6000DualMonitor
         public DateTime Time;
         public string Result;
         public string[] Values;
+        public string[] Verdicts;
         public string Detail;
     }
 
@@ -31,6 +32,9 @@ namespace SC6000DualMonitor
             public DateTime Time;
             public string Result;
             public bool Completed;
+            public string[] Verdicts;
+            public string ConditionResult;
+            public bool Ready { get { return Completed && Verdicts != null && Values.All(v => v != null); } }
             public readonly string[] Values = new string[4];
         }
         private sealed class Subscription
@@ -41,6 +45,7 @@ namespace SC6000DualMonitor
         }
 
         private readonly string[] _names;
+        private readonly string[] _conditionOutputs;
         private readonly object _gate = new object();
         private readonly Dictionary<object, int> _modules = new Dictionary<object, int>();
         private readonly Dictionary<uint, Pending> _pending = new Dictionary<uint, Pending>();
@@ -75,11 +80,12 @@ namespace SC6000DualMonitor
             return Discover(procedure).Keys.OrderBy(n => n, StringComparer.OrdinalIgnoreCase).ToArray();
         }
 
-        public CsvModuleCapture(VmProcedure procedure, CsvModuleMapping mapping)
+        public CsvModuleCapture(VmProcedure procedure, CsvModuleMapping mapping, IList<ConditionRange> ranges)
         {
             var discovered = Discover(procedure);
             mapping.Validate(discovered.Keys);
             _names = (string[])mapping.ModuleNames.Clone();
+            _conditionOutputs = ResolveConditionOutputs(ranges);
 
             try
             {
@@ -107,6 +113,47 @@ namespace SC6000DualMonitor
             }
         }
 
+        internal static string[] ResolveConditionOutputs(IList<ConditionRange> ranges)
+        {
+            string[][] aliases = { new[] { "CB", "TOP", "TOPSIZE" }, new[] { "WIRE", "MIDDLE", "MIDDLESIZE" },
+                new[] { "INS", "BOTTOM", "BOTTOMSIZE" }, new[] { "C", "CIRCLE", "CIRCLESIZE" } };
+            var outputs = new string[4];
+            for (int i = 0; i < outputs.Length; i++)
+            {
+                var matches = ranges.Select(r => r.Definition).Where(d => !d.IsInteger &&
+                    (aliases[i].Contains(d.Caption.Replace("_", "").Replace(" ", "").ToUpperInvariant()) ||
+                     (d.Caption == d.Name && d.Name == "float" + i))).ToArray();
+                if (matches.Length == 1) outputs[i] = matches[0].Name + "Out";
+            }
+            return outputs;
+        }
+
+        public void ConditionFinished(ImvsSdkDefine.IMVS_MODULE_RESULT_INFO_LIST_EX_Data frame, string overall)
+        {
+            var verdicts = new string[4];
+            if (frame.nErrorCode == 0 && frame.pInfo != null)
+            {
+                foreach (var field in frame.pInfo)
+                {
+                    var name = (field.strParamName ?? "").Trim('%');
+                    int index = Array.IndexOf(_conditionOutputs, name);
+                    if (index < 0 || field.pIntValue == null || field.pIntValue.Length != 1) continue;
+                    int status = field.pIntValue[0];
+                    verdicts[index] = status == 1 ? "OK" : status == 0 ? "NG" : null;
+                }
+            }
+            CsvInspectionSample ready = null;
+            lock (_gate)
+            {
+                if (_disposed || _emitted.Contains(frame.nExecuteCount)) return;
+                var entry = GetPending(frame.nExecuteCount);
+                entry.Verdicts = verdicts;
+                entry.ConditionResult = frame.nErrorCode == 0 ? (overall ?? "").Trim().ToUpperInvariant() : null;
+                if (entry.Ready) ready = Complete(entry);
+            }
+            if (ready != null) Emit(ready);
+        }
+
         private void OnModuleResult(object sender, EventArgs args)
         {
             var callback = args as VMControls.Interface.ValueEventArgs;
@@ -128,7 +175,7 @@ namespace SC6000DualMonitor
                 if (!_modules.TryGetValue(sender, out index)) return;
                 Pending entry = GetPending(result.nExecuteCount);
                 entry.Values[index] = value.Trim();
-                if (entry.Completed && entry.Values.All(v => v != null))
+                if (entry.Ready)
                     ready = Complete(entry);
             }
             if (ready != null) Emit(ready);
@@ -144,7 +191,7 @@ namespace SC6000DualMonitor
                 entry.Result = outcome.ToString().ToUpperInvariant();
                 entry.Time = DateTime.Now;
                 entry.Completed = true;
-                if (entry.Values.All(v => v != null)) ready = Complete(entry);
+                if (entry.Ready) ready = Complete(entry);
             }
             if (ready != null) Emit(ready);
         }
@@ -166,13 +213,22 @@ namespace SC6000DualMonitor
             _emitted.Add(entry.Frame);
             _emittedOrder.Enqueue(entry.Frame);
             while (_emittedOrder.Count > 2048) _emitted.Remove(_emittedOrder.Dequeue());
-            var missing = _names.Where((n, i) => entry.Values[i] == null).ToArray();
+            var missing = _names.Where((n, i) => Measurement(entry.Values[i]) == null || entry.Verdicts == null || entry.Verdicts[i] == null).ToArray();
             return new CsvInspectionSample
             {
                 Frame = entry.Frame, Time = entry.Time == default(DateTime) ? DateTime.Now : entry.Time,
-                Result = entry.Result ?? "ERROR", Values = (string[])entry.Values.Clone(),
+                Result = entry.Result == "ERROR" ? "ERROR" : (entry.ConditionResult ?? entry.Result ?? "ERROR"), Verdicts = entry.Verdicts, Values = (string[])entry.Values.Clone(),
                 Detail = missing.Length == 0 ? "OK" : "MISSING: " + string.Join(";", missing)
             };
+        }
+
+        internal static string Measurement(string raw)
+        {
+            string text = (raw ?? "").Trim();
+            if (text.EndsWith("mm", StringComparison.OrdinalIgnoreCase)) text = text.Substring(0, text.Length - 2).Trim();
+            double value;
+            return double.TryParse(text, NumberStyles.Float, CultureInfo.InvariantCulture, out value) &&
+                !double.IsNaN(value) && !double.IsInfinity(value) ? text : null;
         }
 
         private void CheckExpired(object state)
@@ -230,7 +286,6 @@ namespace SC6000DualMonitor
         {
             public CsvInspectionSample Sample;
             public string PartNumber;
-            public string Recipe;
         }
         private readonly object _gate = new object();
         private readonly Queue<Entry> _queue = new Queue<Entry>();
@@ -265,7 +320,7 @@ namespace SC6000DualMonitor
         }
         public bool HasError { get { lock (_gate) return _error != null || _dropped > 0; } }
 
-        public void Enqueue(CsvInspectionSample sample, string partNo, string recipe)
+        public void Enqueue(CsvInspectionSample sample, string partNo)
         {
             lock (_gate)
             {
@@ -276,28 +331,36 @@ namespace SC6000DualMonitor
                     _error = "처리 대기 2048건 초과 (드롭 " + _dropped + "건)";
                     return;
                 }
-                _queue.Enqueue(new Entry { Sample = sample, PartNumber = partNo, Recipe = recipe });
+                _queue.Enqueue(new Entry { Sample = sample, PartNumber = partNo });
                 _signal.Set();
             }
         }
-        private static string Csv(string value)
+        private static readonly string[] Labels = { "CB", "WIRE", "INS", "C" };
+        private static readonly int[] OutputOrder = { 3, 0, 1, 2 };
+        private static string FormatLine(Entry entry)
         {
-            string s = value ?? "";
-            double number;
-            if (double.TryParse(s, NumberStyles.Float, CultureInfo.InvariantCulture, out number)) return s;
-            // Prevent spreadsheet formula execution when a file is opened in Excel.
-            if (s.Length > 0 && (s[0] == '=' || s[0] == '+' || s[0] == '-' || s[0] == '@' ||
-                s[0] == '\t' || s[0] == '\r')) s = "'" + s;
-            double numeric;
-            if (double.TryParse(s, NumberStyles.Float, CultureInfo.InvariantCulture, out numeric))
-                return s;
-            return "\"" + s.Replace("\"", "\"\"") + "\"";
+            var sample = entry.Sample;
+            var parts = new List<string>(12);
+            foreach (int i in OutputOrder)
+            {
+                string value = CsvModuleCapture.Measurement(sample.Values == null ? null : sample.Values.ElementAtOrDefault(i));
+                string verdict = sample.Verdicts == null ? null : sample.Verdicts.ElementAtOrDefault(i);
+                bool valid = value != null && (verdict == "OK" || verdict == "NG");
+                parts.Add(Labels[i]);
+                parts.Add(valid ? verdict : "ERROR");
+                parts.Add(valid ? value : "");
+            }
+            string model = "@@" + entry.PartNumber + "@@";
+            if (model.IndexOfAny(new[] { ',', '"', '\r', '\n' }) >= 0) model = "\"" + model.Replace("\"", "\"\"") + "\"";
+            return string.Join(",", new[] { sample.Time.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
+                sample.Time.ToString("HH:mm:ss", CultureInfo.InvariantCulture), sample.Frame.ToString(CultureInfo.InvariantCulture),
+                model, sample.Result == "OK" ? "OK" : "NG", string.Join(":", parts) });
         }
         private void Write(Entry[] entries)
         {
             var item = entries[0].Sample;
             Directory.CreateDirectory(_folder);
-            string path = Path.Combine(_folder, "inspection_" + item.Time.ToString("yyyy-MM-dd") + ".csv");
+            string path = Path.Combine(_folder, "inspection_v2_" + item.Time.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture) + ".csv");
             Append(path, entries);
         }
         private static void Append(string path, Entry[] entries)
@@ -310,17 +373,9 @@ namespace SC6000DualMonitor
                 {
                     var content = new StringBuilder();
                     foreach (var entry in entries)
-                    {
-                    var item = entry.Sample;
-                    var v = item.Values ?? new string[4];
-                    string line = string.Join(",", new[] {
-                        Csv(item.Time.ToString("yyyy-MM-dd HH:mm:ss.fff", CultureInfo.InvariantCulture)), item.Frame.ToString(CultureInfo.InvariantCulture),
-                        Csv(entry.PartNumber), Csv(entry.Recipe), Csv(v.ElementAtOrDefault(0)), Csv(v.ElementAtOrDefault(1)),
-                        Csv(v.ElementAtOrDefault(2)), Csv(v.ElementAtOrDefault(3)), Csv(item.Result), Csv(item.Detail) }) + "\r\n";
-                    content.Append(line);
-                    }
+                        content.Append(FormatLine(entry)).Append("\r\n");
                     string batch = content.ToString();
-                    if (length == 0) batch = "\uFEFFTime,Frame,PART NO,Recipe,Top,Middle,Bottom,Circle,Result,DataStatus\r\n" + batch;
+                    if (length == 0) batch = "\uFEFFDate,Time,Frame,PART NO,Result,Details\r\n" + batch;
                     byte[] bytes = new UTF8Encoding(false).GetBytes(batch);
                     stream.Write(bytes, 0, bytes.Length);
                     stream.Flush();

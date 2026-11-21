@@ -172,7 +172,7 @@ namespace SC6000DualMonitor
             lock (_bindingGate)
             {
                 if (!ReferenceEquals(sender, _session) || !_csvActive) return;
-                _csvWriter.Enqueue(sample, _csvPartNumber, _csvRecipePath);
+                _csvWriter.Enqueue(sample, _csvPartNumber);
             }
         }
         private void OpenCsvOptions()

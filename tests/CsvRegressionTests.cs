@@ -24,6 +24,7 @@ class CsvRegressionTests
         foreach(string name in new[]{"_gate","_modules","_pending","_emitted","_emittedOrder","_subscriptions"})
         {var f=type.GetField(name,F);f.SetValue(result,Activator.CreateInstance(f.FieldType));}
         Set(result,"_names",new[]{"Top","Middle","Bottom","Circle"});
+        Set(result,"_conditionOutputs",new[]{"float0Out","float1Out","float2Out","float3Out"});
         var ev=type.GetEvent("SampleReady");
         ev.AddEventHandler(result,Delegate.CreateDelegate(ev.EventHandlerType,rows,typeof(List<object>).GetMethod("Add")));
         return result;
@@ -45,10 +46,26 @@ class CsvRegressionTests
         var args=Activator.CreateInstance(Assembly.Load("VMControls.Interface").GetType("VMControls.Interface.ValueEventArgs",true));Set(args,"Value",result);
         Call(capture,"OnModuleResult",sender,args);
     }
+    static void Condition(object capture,uint frame,string total,int wire)
+    {
+        Type type=Assembly.Load("VM.PlatformSDKCS").GetType("VM.PlatformSDKCS.ImvsSdkDefine+IMVS_MODULE_RESULT_INFO_LIST_EX_Data",true);
+        object result=Activator.CreateInstance(type); Set(result,"nExecuteCount",frame);
+        var fieldType=type.GetField("pInfo").FieldType.GetElementType();
+        var fields=Array.CreateInstance(fieldType,4);
+        for(int i=0;i<4;i++)
+        {
+            object field=Activator.CreateInstance(fieldType);
+            Set(field,"strParamName","%float"+i+"Out%");
+            Set(field,"pIntValue",new[]{i==1?wire:1});
+            fields.SetValue(field,3-i);
+        }
+        Set(result,"pInfo",fields);
+        Call(capture,"ConditionFinished",result,total);
+    }
     static object Sample(uint frame)
     {
         var s=Activator.CreateInstance(T("CsvInspectionSample"));Set(s,"Frame",frame);Set(s,"Time",DateTime.Now);
-        Set(s,"Values",new[]{"-1.25","4.25","5.0","6.5"});Set(s,"Result","NG");Set(s,"Detail","OK");return s;
+        Set(s,"Verdicts",new[]{"OK","NG","OK","OK"});Set(s,"Values",new[]{"-1.25mm","4.25","5.0","6.5 mm"});Set(s,"Result","NG");Set(s,"Detail","OK");return s;
     }
     [STAThread] static int Main(string[] args)
     { try { Run(args); return 0; } catch(Exception ex) { while(ex != null) { Console.WriteLine(ex.GetType().FullName + ": " + ex.Message); Console.WriteLine(ex.StackTrace); ex=ex.InnerException; } return 1; } }
@@ -58,7 +75,7 @@ class CsvRegressionTests
         AppDomain.CurrentDomain.AssemblyResolve+=(s,e)=>{string p=Path.Combine(sdk,new AssemblyName(e.Name).Name+".dll");return File.Exists(p)?Assembly.LoadFrom(p):null;};
         app=Assembly.LoadFrom(Path.GetFullPath(args[0]));
         var rows=new List<object>();var c=Capture(rows);
-        Values(c,10,"a");Values(c,11,"b");Finish(c,11,"Ng");Finish(c,10,"Ok");Finish(c,10,"Ok");
+        Condition(c,10,"OK",1);Condition(c,11,"NG",0);Values(c,10,"a");Values(c,11,"b");Finish(c,11,"Ng");Finish(c,10,"Ok");Finish(c,10,"Ok");
         Check(rows.Count==2,"one row per completed frame despite duplicate callback");
         Check((uint)Field(rows[0],"Frame")==11 && ((string[])Field(rows[0],"Values"))[0]=="b0","no cross-frame values");
         Check((string)Field(rows[1],"Result")=="OK","OK classification retained");
@@ -72,6 +89,9 @@ class CsvRegressionTests
         var modules=(IDictionary)Field(callbackCapture,"_modules");for(int i=0;i<4;i++)modules.Add(senders[i],i);
         Finish(callbackCapture,20,"Ng");
         for(int i=0;i<4;i++)Callback(callbackCapture,senders[i],20,"format_out",(i+1).ToString(),0);
+        Check(callbackRows.Count==0,"wait for same-frame condition callback");
+        Condition(callbackCapture,20,"NG",0);
+        Check(((string[])Field(callbackRows[0],"Verdicts"))[1]=="NG","named WIRE verdict even when outputs arrive in reverse order");
         Check(callbackRows.Count==1 && ((string[])Field(callbackRows[0],"Values"))[3]=="4","SDK format_out callbacks arriving after procedure join by frame");
         Finish(callbackCapture,21,"Ok");
         for(int i=0;i<4;i++)Callback(callbackCapture,senders[i],21,"StrResult","wrong",0);
@@ -92,18 +112,22 @@ class CsvRegressionTests
         string blocked=Path.Combine(testRoot,"data");File.WriteAllText(blocked,"deliberate blocked directory");
         var w=Activator.CreateInstance(T("CsvInspectionWriter"),new object[]{"csv-test"});Set(w,"_folder",blocked);
         Func<bool> error=()=> (bool)w.GetType().GetProperty("HasError").GetValue(w,null);
-        Call(w,"Enqueue",Sample(1),"=bad,\"part\"","/recipeA.solx");Wait(error,"disk failure is visible");
+        Call(w,"Enqueue",Sample(1),"=bad,\"part\"");Wait(error,"disk failure is visible");
         File.Delete(blocked);
-        for(uint i=2;i<=1001;i++)Call(w,"Enqueue",Sample(i),"part","/recipeA.solx");
+        for(uint i=2;i<=1001;i++)Call(w,"Enqueue",Sample(i),"part");
         Wait(()=>((long)Field(w,"_saved"))==1001,"burst 1000 rows drains without drops; failed row retries");
         ((IDisposable)w).Dispose();
         string[] lines=File.ReadAllLines(Directory.GetFiles(blocked,"*.csv")[0]);
         Check(lines.Length==1002,"header plus every row exactly once after retry");
-        Check(lines[1].Contains(",1,") && lines[1].Contains(",-1.25,"),"failed first row retained; negative measurement remains numeric");
-        Check(lines[1].Contains("\"'=bad,\"\"part\"\"\""),"formula and CSV quote escaping");
+        Check(lines[0]=="Date,Time,Frame,PART NO,Result,Details","six-column header");
+        Check(lines[1].Contains(",1,\"@@=bad,\"\"part\"\"@@\",NG,C:OK:6.5:CB:OK:-1.25:WIRE:NG:4.25:INS:OK:5.0"),"ordered item verdicts, units and quoted model");
+        var failed=Sample(6); Set(failed,"Result","ERROR"); Set(failed,"Values",new[]{"mm","mm","mm","mm"});
+        var errorWriter=Activator.CreateInstance(T("CsvInspectionWriter"),new object[]{"csv-error-test"});Set(errorWriter,"_folder",blocked);
+        Call(errorWriter,"Enqueue",failed,"");((IDisposable)errorWriter).Dispose();
+        Check(File.ReadAllLines(Directory.GetFiles(blocked,"*.csv")[0]).Last().EndsWith(",6,@@@@,NG,C:ERROR::CB:ERROR::WIRE:ERROR::INS:ERROR:"),"field sample with missing part and unit-only strings");
         string failedFolder=Path.Combine(testRoot,"shutdown-blocked");File.WriteAllText(failedFolder,"blocked");
         var recovery=Activator.CreateInstance(T("CsvInspectionWriter"),new object[]{"csv-recovery-test"});Set(recovery,"_folder",failedFolder);
-        Call(recovery,"Enqueue",Sample(2000),"part","/recipeA.solx");
+        Call(recovery,"Enqueue",Sample(2000),"part");
         Wait(()=>Field(recovery,"_error")!=null,"shutdown fault reproduced");
         Set(recovery,"_stop",true);((AutoResetEvent)Field(recovery,"_signal")).Set();
         Wait(()=>((string)Field(recovery,"_error")??"").StartsWith("미저장 결과 복구 파일: "),"shutdown failure creates a recovery CSV");

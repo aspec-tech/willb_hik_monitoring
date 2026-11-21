@@ -111,6 +111,7 @@ namespace SC6000DualMonitor
                     bool ng = frame.nErrorCode == 0 && string.Equals((verdict ?? "").Trim(), "NG", StringComparison.OrdinalIgnoreCase);
                     bool error = frame.nErrorCode != 0 || (!ng && !string.Equals((verdict ?? "").Trim(), "OK", StringComparison.OrdinalIgnoreCase));
                     if (_ngFrames.Record(frame.nExecuteCount, ng, null, error)) RequestCapture(frame.nExecuteCount);
+                    if (_csvCapture != null) _csvCapture.ConditionFinished(frame, verdict);
                 }
                 catch (Exception ex) { Trace.WriteLine("NG capture result: " + ex); }
             }
@@ -174,7 +175,7 @@ namespace SC6000DualMonitor
                     if (_csvCapture != null) return;
                 }
                 if (mapping == null) throw new InvalidOperationException("CSV 항목 설정을 먼저 완료하세요.");
-                var created = new CsvModuleCapture(_procedure, mapping);
+                var created = new CsvModuleCapture(_procedure, mapping, ReadRanges());
                 created.SampleReady += OnCsvSample;
                 bool accepted = false;
                 lock (_callbackGate)
